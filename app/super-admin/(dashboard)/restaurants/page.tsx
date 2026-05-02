@@ -54,12 +54,13 @@ export default async function RestaurantsListPage() {
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Created</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100">
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-zinc-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-zinc-500">
                   No restaurants yet.{' '}
                   <Link
                     href="/super-admin/new-restaurant"
@@ -91,6 +92,16 @@ export default async function RestaurantsListPage() {
                   </td>
                   <td className="px-4 py-3 text-zinc-500">
                     {new Date(r.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/${r.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-700 underline hover:text-zinc-900"
+                    >
+                      View
+                    </Link>
                   </td>
                 </tr>
               ))
