@@ -68,7 +68,12 @@ export function NewRestaurantForm() {
     <form action={action} className="space-y-6">
       <Section title="Restaurant">
         <Field name="name" label="Name" required />
-        <Field name="slug" label="Slug" required placeholder="e.g. crispy-bites" />
+        <Field
+          name="slug"
+          label="Slug"
+          required
+          placeholder="e.g. crispy-bites"
+        />
         <Field name="email" label="Email" type="email" />
         <Field name="phone" label="Phone" />
         <div className="flex flex-col gap-1">

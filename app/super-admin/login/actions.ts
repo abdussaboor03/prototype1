@@ -24,7 +24,11 @@ export async function signIn(
   })
 
   if (error || !data.user) {
-    console.error('[super-admin signIn] supabase error:', error?.message, error?.status)
+    console.error(
+      '[super-admin signIn] supabase error:',
+      error?.message,
+      error?.status,
+    )
     return { error: 'Invalid email or password.' }
   }
 

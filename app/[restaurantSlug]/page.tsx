@@ -69,12 +69,16 @@ export default async function PublicRestaurantPage({
   const { restaurantSlug } = await params
   const supabase = await createSupabaseServerClient()
 
-  const { data: restaurant } = await supabase
+  const { data: restaurant, error: restaurantError } = await supabase
     .from('restaurants')
     .select('id, name, slug, phone, is_active')
     .eq('slug', restaurantSlug)
     .eq('is_active', true)
     .maybeSingle<Restaurant>()
+
+  if (restaurantError) {
+    console.error('[public-menu] restaurant query failed', restaurantError)
+  }
 
   if (!restaurant) notFound()
 
@@ -112,6 +116,19 @@ export default async function PublicRestaurantPage({
         .order('sort_order')
         .order('name'),
     ])
+
+  if (settingsRes.error) {
+    console.error('[public-menu] settings query failed', settingsRes.error)
+  }
+  if (branchesRes.error) {
+    console.error('[public-menu] branches query failed', branchesRes.error)
+  }
+  if (categoriesRes.error) {
+    console.error('[public-menu] categories query failed', categoriesRes.error)
+  }
+  if (menuItemsRes.error) {
+    console.error('[public-menu] menu_items query failed', menuItemsRes.error)
+  }
 
   const settings = settingsRes.data
   const branches = (branchesRes.data ?? []) as Branch[]

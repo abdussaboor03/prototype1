@@ -19,6 +19,18 @@ function strOrNull(form: FormData, name: string) {
   return v === '' ? null : v
 }
 
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+function normalizeSlug(input: string) {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 export async function createRestaurant(
   _prev: CreateRestaurantState,
   formData: FormData,
@@ -26,13 +38,13 @@ export async function createRestaurant(
   await verifySuperAdmin()
 
   const name = str(formData, 'name')
-  const slug = str(formData, 'slug')
+  const slug = normalizeSlug(str(formData, 'slug'))
   const email = strOrNull(formData, 'email')
   const phone = strOrNull(formData, 'phone')
   const planRaw = str(formData, 'plan_type') || 'free'
 
   const branchName = str(formData, 'branch_name')
-  const branchSlug = str(formData, 'branch_slug')
+  const branchSlug = normalizeSlug(str(formData, 'branch_slug'))
   const branchAddress = strOrNull(formData, 'branch_address')
   const branchPhone = strOrNull(formData, 'branch_phone')
   const openingTime = strOrNull(formData, 'opening_time')
@@ -49,8 +61,20 @@ export async function createRestaurant(
 
   if (!name) return { error: 'Restaurant name is required.' }
   if (!slug) return { error: 'Restaurant slug is required.' }
+  if (!SLUG_RE.test(slug)) {
+    return {
+      error:
+        'Restaurant slug must be lowercase letters, numbers, and hyphens only (no spaces, no leading/trailing hyphens).',
+    }
+  }
   if (!branchName) return { error: 'Branch name is required.' }
   if (!branchSlug) return { error: 'Branch slug is required.' }
+  if (!SLUG_RE.test(branchSlug)) {
+    return {
+      error:
+        'Branch slug must be lowercase letters, numbers, and hyphens only (no spaces, no leading/trailing hyphens).',
+    }
+  }
   if (!ALLOWED_PLANS.includes(planRaw as PlanType)) {
     return { error: 'Plan type must be free, starter, pro, or enterprise.' }
   }
