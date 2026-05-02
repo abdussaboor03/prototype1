@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import RestaurantMenuClient from './restaurant-menu-client'
 
 type Restaurant = {
   id: string
@@ -49,11 +50,23 @@ type MenuItem = {
   sort_order: number
 }
 
-const pkr = new Intl.NumberFormat('en-PK', {
-  style: 'currency',
-  currency: 'PKR',
-  maximumFractionDigits: 0,
-})
+type ModifierGroup = {
+  id: string
+  menu_item_id: string
+  name: string
+  is_required: boolean
+  min_select: number
+  max_select: number
+  sort_order: number
+}
+
+type Modifier = {
+  id: string
+  modifier_group_id: string
+  name: string
+  price_delta: number
+  sort_order: number
+}
 
 function formatTime(t: string | null) {
   if (!t) return null
@@ -135,12 +148,43 @@ export default async function PublicRestaurantPage({
   const categories = (categoriesRes.data ?? []) as Category[]
   const menuItems = (menuItemsRes.data ?? []) as MenuItem[]
 
-  const itemsByCategory = new Map<string, MenuItem[]>()
-  for (const item of menuItems) {
-    if (!item.category_id) continue
-    const list = itemsByCategory.get(item.category_id) ?? []
-    list.push(item)
-    itemsByCategory.set(item.category_id, list)
+  let modifierGroups: ModifierGroup[] = []
+  let modifiers: Modifier[] = []
+
+  if (menuItems.length > 0) {
+    const mgRes = await supabase
+      .from('modifier_groups')
+      .select(
+        'id, menu_item_id, name, is_required, min_select, max_select, sort_order',
+      )
+      .in(
+        'menu_item_id',
+        menuItems.map((m) => m.id),
+      )
+      .order('sort_order')
+
+    if (mgRes.error) {
+      console.error('[public-menu] modifier_groups query failed', mgRes.error)
+    }
+
+    modifierGroups = (mgRes.data ?? []) as ModifierGroup[]
+
+    if (modifierGroups.length > 0) {
+      const mRes = await supabase
+        .from('modifiers')
+        .select('id, modifier_group_id, name, price_delta, sort_order')
+        .in(
+          'modifier_group_id',
+          modifierGroups.map((g) => g.id),
+        )
+        .order('sort_order')
+
+      if (mRes.error) {
+        console.error('[public-menu] modifiers query failed', mRes.error)
+      }
+
+      modifiers = (mRes.data ?? []) as Modifier[]
+    }
   }
 
   const primary = settings?.primary_color ?? '#111111'
@@ -152,28 +196,23 @@ export default async function PublicRestaurantPage({
     '--brand-contrast': secondary,
   } as React.CSSProperties
 
-  const hasMenu = categories.length > 0 && menuItems.length > 0
-
   return (
     <div style={cssVars} className="min-h-screen bg-zinc-50 text-zinc-900">
       {/* Banner */}
-      <div className="relative h-40 w-full bg-zinc-200 sm:h-56">
-        {settings?.banner_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
+      {settings?.banner_url ? (
+        <div className="relative h-40 w-full bg-zinc-200 sm:h-56">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={settings.banner_url}
             alt=""
             className="h-full w-full object-cover"
           />
-        ) : (
-          <div
-            className="h-full w-full"
-            style={{ backgroundColor: 'var(--brand)' }}
-          />
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="h-24 w-full bg-gradient-to-b from-zinc-100 to-zinc-50 sm:h-32" />
+      )}
 
-      <div className="mx-auto -mt-10 w-full max-w-3xl px-4 pb-16 sm:-mt-12 sm:px-6">
+      <div className="mx-auto -mt-10 w-full max-w-3xl px-4 pb-32 sm:-mt-12 sm:px-6">
         {/* Header card */}
         <header className="flex items-start gap-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
           <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-100 sm:h-20 sm:w-20">
@@ -286,70 +325,14 @@ export default async function PublicRestaurantPage({
           </section>
         )}
 
-        {/* Menu */}
-        <section className="mt-8">
-          <h2 className="text-lg font-semibold">Menu</h2>
-
-          {!hasMenu ? (
-            <div className="mt-4 rounded-lg border border-dashed border-zinc-300 bg-white p-8 text-center text-sm text-zinc-500">
-              The menu is not available yet. Please check back soon.
-            </div>
-          ) : (
-            <div className="mt-4 space-y-8">
-              {categories.map((cat) => {
-                const items = itemsByCategory.get(cat.id) ?? []
-                if (items.length === 0) return null
-                return (
-                  <div key={cat.id}>
-                    <h3
-                      className="text-base font-semibold"
-                      style={{ color: 'var(--brand)' }}
-                    >
-                      {cat.name}
-                    </h3>
-                    {cat.description ? (
-                      <p className="mt-0.5 text-sm text-zinc-500">
-                        {cat.description}
-                      </p>
-                    ) : null}
-                    <ul className="mt-3 divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 bg-white">
-                      {items.map((item) => (
-                        <li
-                          key={item.id}
-                          className="flex items-start gap-3 p-4 sm:gap-4"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-baseline justify-between gap-3">
-                              <p className="truncate font-medium">
-                                {item.name}
-                              </p>
-                              <p className="shrink-0 text-sm font-semibold">
-                                {pkr.format(Number(item.price))}
-                              </p>
-                            </div>
-                            {item.description ? (
-                              <p className="mt-1 line-clamp-2 text-sm text-zinc-600">
-                                {item.description}
-                              </p>
-                            ) : null}
-                          </div>
-                          {item.image_url ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={item.image_url}
-                              alt=""
-                              className="h-16 w-16 shrink-0 rounded-md object-cover sm:h-20 sm:w-20"
-                            />
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </section>
+        <RestaurantMenuClient
+          restaurantSlug={restaurant.slug}
+          primaryColor={primary}
+          categories={categories}
+          menuItems={menuItems}
+          modifierGroups={modifierGroups}
+          modifiers={modifiers}
+        />
 
         <footer className="mt-12 text-center text-xs text-zinc-400">
           Powered by your platform
