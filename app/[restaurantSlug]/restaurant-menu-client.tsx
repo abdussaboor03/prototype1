@@ -1,6 +1,12 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import {
+  placeOrder,
+  type OrderType,
+  type PaymentMethod,
+  type PlacedOrder,
+} from './actions'
 
 type Category = {
   id: string
@@ -90,6 +96,19 @@ export default function RestaurantMenuClient({
   const [selection, setSelection] = useState<Record<string, string[]>>({})
   const [validationError, setValidationError] = useState<string | null>(null)
   const [showCart, setShowCart] = useState(false)
+
+  const [showCheckout, setShowCheckout] = useState(false)
+  const [placing, setPlacing] = useState(false)
+  const [orderError, setOrderError] = useState<string | null>(null)
+  const [confirmation, setConfirmation] = useState<PlacedOrder | null>(null)
+
+  const [custName, setCustName] = useState('')
+  const [custPhone, setCustPhone] = useState('')
+  const [custEmail, setCustEmail] = useState('')
+  const [orderType, setOrderType] = useState<OrderType>('pickup')
+  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [notes, setNotes] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
 
   const storageKey = `cart:${restaurantSlug}`
 
@@ -268,6 +287,67 @@ export default function RestaurantMenuClient({
 
   function removeItem(key: string) {
     setCart((prev) => prev.filter((c) => c.key !== key))
+  }
+
+  function openCheckout() {
+    setShowCart(false)
+    setShowCheckout(true)
+    setOrderError(null)
+  }
+
+  async function submitOrder() {
+    if (placing) return
+    if (!custName.trim()) return setOrderError('Name is required.')
+    if (!custPhone.trim()) return setOrderError('Phone is required.')
+    if (orderType === 'delivery' && !deliveryAddress.trim()) {
+      return setOrderError('Delivery address is required.')
+    }
+    if (cart.length === 0) return setOrderError('Cart is empty.')
+
+    setOrderError(null)
+    setPlacing(true)
+    try {
+      const result = await placeOrder({
+        restaurantSlug,
+        customer: {
+          name: custName.trim(),
+          phone: custPhone.trim(),
+          email: custEmail.trim() || null,
+        },
+        orderType,
+        deliveryAddress:
+          orderType === 'delivery' ? deliveryAddress.trim() : null,
+        notes: notes.trim() || null,
+        paymentMethod,
+        cart: cart.map((c) => ({
+          menu_item_id: c.menu_item_id,
+          modifier_ids: c.selected_modifiers.map((m) => m.id),
+          quantity: c.quantity,
+        })),
+      })
+      if (result.ok) {
+        setConfirmation(result.order)
+        setShowCheckout(false)
+        setCart([])
+        try {
+          sessionStorage.removeItem(storageKey)
+        } catch {
+          // ignore
+        }
+        setCustName('')
+        setCustPhone('')
+        setCustEmail('')
+        setDeliveryAddress('')
+        setNotes('')
+      } else {
+        setOrderError(result.error)
+      }
+    } catch (e) {
+      console.error('[checkout] placeOrder failed', e)
+      setOrderError('Could not place order. Please try again.')
+    } finally {
+      setPlacing(false)
+    }
   }
 
   const hasMenu = categories.length > 0 && menuItems.length > 0
@@ -571,8 +651,290 @@ export default function RestaurantMenuClient({
                     <span>{pkr.format(total)}</span>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={openCheckout}
+                  className="mt-4 w-full rounded-md px-4 py-2.5 text-sm font-medium text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  Checkout
+                </button>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Checkout panel */}
+      {showCheckout ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
+          onClick={() => {
+            if (!placing) setShowCheckout(false)
+          }}
+        >
+          <div
+            className="max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-zinc-200 p-4">
+              <h3 className="text-lg font-semibold">Checkout</h3>
+              <button
+                type="button"
+                onClick={() => setShowCheckout(false)}
+                disabled={placing}
+                className="text-zinc-400 hover:text-zinc-700 disabled:opacity-50"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                submitOrder()
+              }}
+              className="p-4"
+            >
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Name
+                  </label>
+                  <input
+                    type="text"
+                    value={custName}
+                    onChange={(e) => setCustName(e.target.value)}
+                    required
+                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={custPhone}
+                    onChange={(e) => setCustPhone(e.target.value)}
+                    required
+                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Email <span className="text-zinc-400">(optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={custEmail}
+                    onChange={(e) => setCustEmail(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <span className="block text-xs font-medium text-zinc-700">
+                    Order type
+                  </span>
+                  <div className="mt-1 grid grid-cols-2 gap-2">
+                    {(['pickup', 'delivery'] as const).map((t) => (
+                      <label
+                        key={t}
+                        className={`cursor-pointer rounded-md border px-3 py-2 text-center text-sm capitalize ${
+                          orderType === t
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-700'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="order_type"
+                          value={t}
+                          checked={orderType === t}
+                          onChange={() => setOrderType(t)}
+                          className="sr-only"
+                        />
+                        {t}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {orderType === 'delivery' ? (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700">
+                      Delivery address
+                    </label>
+                    <textarea
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      required
+                      rows={2}
+                      className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm"
+                    />
+                  </div>
+                ) : null}
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-700">
+                    Notes <span className="text-zinc-400">(optional)</span>
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <span className="block text-xs font-medium text-zinc-700">
+                    Payment method
+                  </span>
+                  <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {(
+                      ['cash', 'easypaisa', 'jazzcash', 'card'] as const
+                    ).map((p) => (
+                      <label
+                        key={p}
+                        className={`cursor-pointer rounded-md border px-2 py-2 text-center text-xs capitalize ${
+                          paymentMethod === p
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-700'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="payment_method"
+                          value={p}
+                          checked={paymentMethod === p}
+                          onChange={() => setPaymentMethod(p)}
+                          className="sr-only"
+                        />
+                        {p}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-md border border-zinc-200 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Order summary
+                </p>
+                <ul className="mt-2 space-y-1 text-sm">
+                  {cart.map((c) => (
+                    <li
+                      key={c.key}
+                      className="flex items-start justify-between gap-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {c.quantity} × {c.item_name}
+                      </span>
+                      <span className="shrink-0">
+                        {pkr.format(c.line_total)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3 space-y-1 border-t border-zinc-200 pt-2 text-sm">
+                  <div className="flex justify-between text-zinc-600">
+                    <span>Subtotal</span>
+                    <span>{pkr.format(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-600">
+                    <span>Delivery fee</span>
+                    <span>{pkr.format(deliveryFee)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-zinc-200 pt-2 text-base font-semibold">
+                    <span>Total</span>
+                    <span>{pkr.format(total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {orderError ? (
+                <p className="mt-4 rounded-md bg-red-50 p-2 text-sm text-red-700">
+                  {orderError}
+                </p>
+              ) : null}
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowCheckout(false)}
+                  disabled={placing}
+                  className="flex-1 rounded-md border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Back
+                </button>
+                <button
+                  type="submit"
+                  disabled={placing}
+                  className="flex-1 rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {placing ? 'Placing order…' : 'Place order'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Order confirmation */}
+      {confirmation ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center"
+          onClick={() => setConfirmation(null)}
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-t-2xl bg-white sm:rounded-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-6 text-center">
+              <div
+                className="mx-auto flex h-12 w-12 items-center justify-center rounded-full text-xl font-semibold text-white"
+                style={{ backgroundColor: primaryColor }}
+              >
+                ✓
+              </div>
+              <h3 className="mt-3 text-lg font-semibold">Order placed!</h3>
+              <p className="mt-1 text-sm text-zinc-600">
+                {confirmation.restaurant_name}
+              </p>
+
+              <dl className="mt-5 space-y-2 rounded-md border border-zinc-200 p-4 text-left text-sm">
+                <div className="flex justify-between">
+                  <dt className="text-zinc-500">Order #</dt>
+                  <dd className="font-mono font-medium">
+                    {confirmation.order_number}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-zinc-500">Status</dt>
+                  <dd className="capitalize">{confirmation.status}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt className="text-zinc-500">Payment</dt>
+                  <dd className="capitalize">{confirmation.payment_method}</dd>
+                </div>
+                <div className="flex justify-between border-t border-zinc-200 pt-2 text-base font-semibold">
+                  <dt>Total</dt>
+                  <dd>{pkr.format(confirmation.total)}</dd>
+                </div>
+              </dl>
+
+              <button
+                type="button"
+                onClick={() => setConfirmation(null)}
+                className="mt-5 w-full rounded-md px-4 py-2 text-sm font-medium text-white"
+                style={{ backgroundColor: primaryColor }}
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
