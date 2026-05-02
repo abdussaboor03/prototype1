@@ -22,10 +22,16 @@ export default async function SuperAdminLayout({
             </Link>
             <nav className="flex items-center gap-4 text-sm text-zinc-600">
               <Link href="/super-admin" className="hover:text-zinc-900">
+                Dashboard
+              </Link>
+              <Link
+                href="/super-admin/restaurants"
+                className="hover:text-zinc-900"
+              >
                 Restaurants
               </Link>
               <Link
-                href="/super-admin/restaurants/new"
+                href="/super-admin/new-restaurant"
                 className="hover:text-zinc-900"
               >
                 New restaurant
