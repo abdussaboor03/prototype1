@@ -30,19 +30,32 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  const isLoginPage = path === '/super-admin/login'
 
-  if (!user && !isLoginPage) {
-    return NextResponse.redirect(new URL('/super-admin/login', request.url))
-  }
-
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL('/super-admin', request.url))
+  if (path.startsWith('/super-admin')) {
+    const isLoginPage = path === '/super-admin/login'
+    if (!user && !isLoginPage) {
+      return NextResponse.redirect(new URL('/super-admin/login', request.url))
+    }
+    if (user && isLoginPage) {
+      return NextResponse.redirect(new URL('/super-admin', request.url))
+    }
+  } else if (path.startsWith('/restaurant-admin')) {
+    const isLoginPage = path === '/restaurant-admin/login'
+    // Sign-out route always passes through so it can clear the session.
+    const isSignOutRoute = path === '/restaurant-admin/sign-out'
+    if (!user && !isLoginPage && !isSignOutRoute) {
+      return NextResponse.redirect(
+        new URL('/restaurant-admin/login', request.url),
+      )
+    }
+    if (user && isLoginPage) {
+      return NextResponse.redirect(new URL('/restaurant-admin', request.url))
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/super-admin/:path*'],
+  matcher: ['/super-admin/:path*', '/restaurant-admin/:path*'],
 }
