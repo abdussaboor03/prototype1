@@ -36,6 +36,12 @@ export default async function RestaurantAdminLayout({
               >
                 Menu
               </Link>
+              <Link
+                href="/restaurant-admin/settings"
+                className="hover:text-zinc-900"
+              >
+                Settings
+              </Link>
             </nav>
           </div>
           <div className="flex items-center gap-4 text-sm">
