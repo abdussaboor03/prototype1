@@ -73,6 +73,113 @@ export default async function RestaurantDetailPage({
   }
   const branches = (branchesData ?? []) as SuperAdminBranch[]
 
+  type CategoryRow = {
+    id: string
+    name: string
+    slug: string
+    sort_order: number | null
+    is_active: boolean
+  }
+  type MenuItemRow = {
+    id: string
+    category_id: string | null
+    name: string
+    slug: string
+    description: string | null
+    price: number
+    image_url: string | null
+    is_available: boolean
+    sort_order: number | null
+  }
+  type ModifierGroupRow = {
+    id: string
+    menu_item_id: string
+    name: string
+    is_required: boolean
+    min_select: number
+    max_select: number
+    sort_order: number | null
+    is_available: boolean
+  }
+  type ModifierRow = {
+    id: string
+    modifier_group_id: string
+    name: string
+    price_delta: number
+    is_available: boolean
+    sort_order: number | null
+  }
+
+  const [catRes, itemsRes, mgRes, mRes] = await Promise.all([
+    admin
+      .from('categories')
+      .select('id, name, slug, sort_order, is_active')
+      .eq('restaurant_id', data.id)
+      .order('sort_order')
+      .order('name'),
+    admin
+      .from('menu_items')
+      .select(
+        'id, category_id, name, slug, description, price, image_url, is_available, sort_order',
+      )
+      .eq('restaurant_id', data.id)
+      .order('sort_order')
+      .order('name'),
+    admin
+      .from('modifier_groups')
+      .select(
+        'id, menu_item_id, name, is_required, min_select, max_select, sort_order, is_available',
+      )
+      .eq('restaurant_id', data.id)
+      .order('sort_order'),
+    admin
+      .from('modifiers')
+      .select(
+        'id, modifier_group_id, name, price_delta, is_available, sort_order',
+      )
+      .eq('restaurant_id', data.id)
+      .order('sort_order'),
+  ])
+
+  if (catRes.error) {
+    console.error('[super-admin/restaurant-detail] categories failed', catRes.error)
+  }
+  if (itemsRes.error) {
+    console.error('[super-admin/restaurant-detail] menu_items failed', itemsRes.error)
+  }
+  if (mgRes.error) {
+    console.error('[super-admin/restaurant-detail] modifier_groups failed', mgRes.error)
+  }
+  if (mRes.error) {
+    console.error('[super-admin/restaurant-detail] modifiers failed', mRes.error)
+  }
+
+  const categories = (catRes.data ?? []) as CategoryRow[]
+  const menuItems = (itemsRes.data ?? []) as MenuItemRow[]
+  const modifierGroups = (mgRes.data ?? []) as ModifierGroupRow[]
+  const modifiers = (mRes.data ?? []) as ModifierRow[]
+
+  const itemsByCategory = new Map<string | null, MenuItemRow[]>()
+  for (const it of menuItems) {
+    const list = itemsByCategory.get(it.category_id) ?? []
+    list.push(it)
+    itemsByCategory.set(it.category_id, list)
+  }
+  const groupsByItem = new Map<string, ModifierGroupRow[]>()
+  for (const g of modifierGroups) {
+    const list = groupsByItem.get(g.menu_item_id) ?? []
+    list.push(g)
+    groupsByItem.set(g.menu_item_id, list)
+  }
+  const modifierCountByGroup = new Map<string, number>()
+  for (const m of modifiers) {
+    modifierCountByGroup.set(
+      m.modifier_group_id,
+      (modifierCountByGroup.get(m.modifier_group_id) ?? 0) + 1,
+    )
+  }
+  const uncategorisedItems = itemsByCategory.get(null) ?? []
+
   return (
     <div className="space-y-6">
       <div>
@@ -225,6 +332,162 @@ export default async function RestaurantDetailPage({
             branches={branches}
           />
         )}
+      </section>
+
+      <section className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900">
+            Menu overview
+          </h2>
+          <p className="text-sm text-zinc-500">
+            Read-only view of categories, items, and modifiers.
+          </p>
+        </div>
+
+        <dl className="grid gap-3 sm:grid-cols-4">
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Categories
+            </dt>
+            <dd className="mt-1 text-lg font-semibold text-zinc-900">
+              {categories.length}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Menu items
+            </dt>
+            <dd className="mt-1 text-lg font-semibold text-zinc-900">
+              {menuItems.length}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Modifier groups
+            </dt>
+            <dd className="mt-1 text-lg font-semibold text-zinc-900">
+              {modifierGroups.length}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Modifiers
+            </dt>
+            <dd className="mt-1 text-lg font-semibold text-zinc-900">
+              {modifiers.length}
+            </dd>
+          </div>
+        </dl>
+
+        {categories.length === 0 && menuItems.length === 0 ? (
+          <p className="rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">
+            No menu data yet for this restaurant.
+          </p>
+        ) : (
+          <ul className="divide-y divide-zinc-100">
+            {categories.map((c) => {
+              const items = itemsByCategory.get(c.id) ?? []
+              return (
+                <li key={c.id} className="py-3 first:pt-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium text-zinc-900">
+                      {c.name}
+                    </span>
+                    <span className="text-xs text-zinc-500">/{c.slug}</span>
+                    {!c.is_active ? (
+                      <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                        inactive
+                      </span>
+                    ) : null}
+                    <span className="text-xs text-zinc-500">
+                      · {items.length} item{items.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  {items.length > 0 ? (
+                    <ul className="mt-2 space-y-1 pl-4">
+                      {items.map((it) => {
+                        const groups = groupsByItem.get(it.id) ?? []
+                        const modCount = groups.reduce(
+                          (sum, g) =>
+                            sum + (modifierCountByGroup.get(g.id) ?? 0),
+                          0,
+                        )
+                        return (
+                          <li
+                            key={it.id}
+                            className="flex flex-wrap items-center gap-2 text-sm text-zinc-700"
+                          >
+                            <span>{it.name}</span>
+                            <span className="text-xs text-zinc-500">
+                              PKR {Number(it.price).toFixed(2)}
+                            </span>
+                            {!it.is_available ? (
+                              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                                unavailable
+                              </span>
+                            ) : null}
+                            <span className="text-xs text-zinc-500">
+                              · {groups.length} group
+                              {groups.length === 1 ? '' : 's'} / {modCount}{' '}
+                              modifier{modCount === 1 ? '' : 's'}
+                            </span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  ) : null}
+                </li>
+              )
+            })}
+            {uncategorisedItems.length > 0 ? (
+              <li className="py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-zinc-900">
+                    Uncategorised
+                  </span>
+                  <span className="text-xs text-zinc-500">
+                    · {uncategorisedItems.length} item
+                    {uncategorisedItems.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1 pl-4">
+                  {uncategorisedItems.map((it) => {
+                    const groups = groupsByItem.get(it.id) ?? []
+                    const modCount = groups.reduce(
+                      (sum, g) => sum + (modifierCountByGroup.get(g.id) ?? 0),
+                      0,
+                    )
+                    return (
+                      <li
+                        key={it.id}
+                        className="flex flex-wrap items-center gap-2 text-sm text-zinc-700"
+                      >
+                        <span>{it.name}</span>
+                        <span className="text-xs text-zinc-500">
+                          PKR {Number(it.price).toFixed(2)}
+                        </span>
+                        {!it.is_available ? (
+                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                            unavailable
+                          </span>
+                        ) : null}
+                        <span className="text-xs text-zinc-500">
+                          · {groups.length} group
+                          {groups.length === 1 ? '' : 's'} / {modCount} modifier
+                          {modCount === 1 ? '' : 's'}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </li>
+            ) : null}
+          </ul>
+        )}
+
+        <p className="text-xs text-zinc-500">
+          Editing comes in SA-4B/SA-4C/SA-4D.
+        </p>
       </section>
     </div>
   )
