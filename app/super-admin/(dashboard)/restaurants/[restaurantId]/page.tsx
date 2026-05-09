@@ -2,13 +2,14 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { verifySuperAdmin } from '@/lib/auth/dal'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import {
+  QuickStatusForm,
+  RestaurantEditForm,
+  type EditableRestaurant,
+} from './restaurant-edit-form'
 
-type Restaurant = {
-  id: string
-  name: string
-  slug: string
-  plan_type: string
-  is_active: boolean
+type Restaurant = EditableRestaurant & {
+  created_at: string
 }
 
 export default async function RestaurantDetailPage({
@@ -22,7 +23,7 @@ export default async function RestaurantDetailPage({
   const admin = createSupabaseAdminClient()
   const { data, error } = await admin
     .from('restaurants')
-    .select('id, name, slug, plan_type, is_active')
+    .select('id, name, slug, email, phone, plan_type, is_active, created_at')
     .eq('id', restaurantId)
     .maybeSingle<Restaurant>()
 
@@ -30,6 +31,16 @@ export default async function RestaurantDetailPage({
     console.error('[super-admin/restaurant-detail] query failed', error)
   }
   if (!data) notFound()
+
+  const { count: branchCountRaw, error: bErr } = await admin
+    .from('branches')
+    .select('id', { count: 'exact', head: true })
+    .eq('restaurant_id', data.id)
+
+  if (bErr) {
+    console.error('[super-admin/restaurant-detail] branches count failed', bErr)
+  }
+  const branchCount = branchCountRaw ?? 0
 
   return (
     <div className="space-y-6">
@@ -42,11 +53,14 @@ export default async function RestaurantDetailPage({
         </Link>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-900">{data.name}</h1>
-        <p className="text-sm text-zinc-500">
-          More management tools coming next.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900">{data.name}</h1>
+          <p className="text-sm text-zinc-500">
+            Restaurant overview and settings.
+          </p>
+        </div>
+        <QuickStatusForm restaurant={data} />
       </div>
 
       <dl className="grid gap-4 rounded-lg border border-zinc-200 bg-white p-5 sm:grid-cols-2">
@@ -61,6 +75,22 @@ export default async function RestaurantDetailPage({
             Plan
           </dt>
           <dd className="mt-1 text-sm text-zinc-900">{data.plan_type}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Email
+          </dt>
+          <dd className="mt-1 text-sm text-zinc-900">
+            {data.email ?? <span className="text-zinc-400">—</span>}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Phone
+          </dt>
+          <dd className="mt-1 text-sm text-zinc-900">
+            {data.phone ?? <span className="text-zinc-400">—</span>}
+          </dd>
         </div>
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -80,6 +110,20 @@ export default async function RestaurantDetailPage({
         </div>
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Branches
+          </dt>
+          <dd className="mt-1 text-sm text-zinc-900">{branchCount}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Created
+          </dt>
+          <dd className="mt-1 text-sm text-zinc-900">
+            {new Date(data.created_at).toLocaleString()}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Public site
           </dt>
           <dd className="mt-1 text-sm">
@@ -94,6 +138,16 @@ export default async function RestaurantDetailPage({
           </dd>
         </div>
       </dl>
+
+      <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-5">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900">Edit details</h2>
+          <p className="text-sm text-zinc-500">
+            Update name, slug, contact info, plan, or status.
+          </p>
+        </div>
+        <RestaurantEditForm restaurant={data} />
+      </section>
     </div>
   )
 }
