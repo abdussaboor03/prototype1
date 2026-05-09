@@ -160,7 +160,7 @@ export async function placeOrder(
   const { data: groupRows, error: gErr } = await admin
     .from('modifier_groups')
     .select(
-      'id, menu_item_id, restaurant_id, name, is_required, min_select, max_select',
+      'id, menu_item_id, restaurant_id, name, is_required, min_select, max_select, is_available',
     )
     .in('menu_item_id', itemIds)
 
@@ -177,6 +177,7 @@ export async function placeOrder(
     is_required: boolean
     min_select: number
     max_select: number
+    is_available: boolean
   }
   const groups = (groupRows ?? []) as DbGroup[]
   const groupById = new Map<string, DbGroup>(groups.map((g) => [g.id, g]))
@@ -252,6 +253,13 @@ export async function placeOrder(
           error: 'A modifier does not belong to the selected item.',
         }
       }
+      if (g.is_available !== true) {
+        return {
+          ok: false,
+          error:
+            'A selected modifier is no longer available. Please review your cart.',
+        }
+      }
     }
 
     const countByGroup = new Map<string, number>()
@@ -262,6 +270,7 @@ export async function placeOrder(
       )
     }
     for (const g of itemGroups) {
+      if (g.is_available !== true) continue
       const c = countByGroup.get(g.id) ?? 0
       const minRequired = g.is_required ? Math.max(1, g.min_select) : g.min_select
       if (c < minRequired) {

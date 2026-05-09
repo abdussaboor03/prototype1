@@ -13,6 +13,9 @@ import SuperAdminSettingsForm, {
 import SuperAdminBranchesForm, {
   type SuperAdminBranch,
 } from './super-admin-branches-form'
+import SuperAdminCategoryManager, {
+  type SuperAdminCategory,
+} from './super-admin-category-manager'
 
 type Restaurant = EditableRestaurant & {
   created_at: string
@@ -378,6 +381,12 @@ export default async function RestaurantDetailPage({
             </dd>
           </div>
         </dl>
+
+        <SuperAdminCategoryManager
+          restaurantId={data.id}
+          restaurantSlug={data.slug}
+          categories={categories as SuperAdminCategory[]}
+        />
 
         {categories.length === 0 && menuItems.length === 0 ? (
           <p className="rounded-md border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">

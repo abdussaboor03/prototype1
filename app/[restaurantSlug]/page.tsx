@@ -161,6 +161,7 @@ export default async function PublicRestaurantPage({
         'menu_item_id',
         menuItems.map((m) => m.id),
       )
+      .eq('is_available', true)
       .order('sort_order')
 
     if (mgRes.error) {
