@@ -7,6 +7,12 @@ import {
   RestaurantEditForm,
   type EditableRestaurant,
 } from './restaurant-edit-form'
+import SuperAdminSettingsForm, {
+  type SuperAdminSettings,
+} from './super-admin-settings-form'
+import SuperAdminBranchesForm, {
+  type SuperAdminBranch,
+} from './super-admin-branches-form'
 
 type Restaurant = EditableRestaurant & {
   created_at: string
@@ -41,6 +47,31 @@ export default async function RestaurantDetailPage({
     console.error('[super-admin/restaurant-detail] branches count failed', bErr)
   }
   const branchCount = branchCountRaw ?? 0
+
+  const { data: settings, error: sErr } = await admin
+    .from('restaurant_settings')
+    .select(
+      'logo_url, banner_url, primary_color, secondary_color, whatsapp_number, instagram_url, facebook_url, minimum_order_amount, is_accepting_orders',
+    )
+    .eq('restaurant_id', data.id)
+    .maybeSingle<SuperAdminSettings>()
+
+  if (sErr) {
+    console.error('[super-admin/restaurant-detail] settings query failed', sErr)
+  }
+
+  const { data: branchesData, error: brErr } = await admin
+    .from('branches')
+    .select(
+      'id, name, opening_time, closing_time, is_accepting_orders, is_active',
+    )
+    .eq('restaurant_id', data.id)
+    .order('created_at', { ascending: true })
+
+  if (brErr) {
+    console.error('[super-admin/restaurant-detail] branches list failed', brErr)
+  }
+  const branches = (branchesData ?? []) as SuperAdminBranch[]
 
   return (
     <div className="space-y-6">
@@ -147,6 +178,53 @@ export default async function RestaurantDetailPage({
           </p>
         </div>
         <RestaurantEditForm restaurant={data} />
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-5">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900">
+            Restaurant settings
+          </h2>
+          <p className="text-sm text-zinc-500">
+            Branding, contact links, ordering availability.
+          </p>
+        </div>
+        {sErr ? (
+          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            Failed to load settings: {sErr.message}
+          </p>
+        ) : settings ? (
+          <SuperAdminSettingsForm
+            restaurantId={data.id}
+            restaurantSlug={data.slug}
+            settings={settings}
+          />
+        ) : (
+          <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            No settings row exists for this restaurant. Create one in the
+            database before editing here.
+          </p>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-zinc-200 bg-white p-5">
+        <div>
+          <h2 className="text-base font-semibold text-zinc-900">Branches</h2>
+          <p className="text-sm text-zinc-500">
+            Hours and ordering availability per branch.
+          </p>
+        </div>
+        {brErr ? (
+          <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            Failed to load branches: {brErr.message}
+          </p>
+        ) : (
+          <SuperAdminBranchesForm
+            restaurantId={data.id}
+            restaurantSlug={data.slug}
+            branches={branches}
+          />
+        )}
       </section>
     </div>
   )
